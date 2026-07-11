@@ -114,6 +114,7 @@ export function useGame() {
 
   const shuffleDeck = useCallback(() => {
     resetSession()
+    playSoundFromGesture('/card-swap.mp3')
   }, [resetSession])
 
   const skipToNextCard = useCallback(() => {

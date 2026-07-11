@@ -12,7 +12,7 @@ export function DeckSelector({ onSelect }: DeckSelectorProps) {
     <div className="flex min-h-dvh flex-col items-center justify-center gap-6 px-6 py-10">
       <div className="mb-4 text-center">
         <img
-          src="/card.png"
+          src="/img_legacy/1.png"
           alt="Lotería"
           className="mx-auto mb-4 h-24 w-auto drop-shadow-lg"
         />
