@@ -32,6 +32,8 @@ function App() {
       onCloseHistory={() => game.setShowHistoryModal(false)}
       onIntervalChange={game.setIntervalSeconds}
       onPlaySound={game.playCardSound}
+      onSkipCard={game.skipToNextCard}
+      canSkipCard={!game.isFinished && (game.isPlaying || game.drawnCards.length > 0)}
     />
   )
 }

@@ -23,6 +23,8 @@ interface GameScreenProps {
   onCloseHistory: () => void
   onIntervalChange: (seconds: number) => void
   onPlaySound: (cardNumber: number) => void
+  onSkipCard: () => void
+  canSkipCard: boolean
 }
 
 export function GameScreen({
@@ -43,6 +45,8 @@ export function GameScreen({
   onCloseHistory,
   onIntervalChange,
   onPlaySound,
+  onSkipCard,
+  canSkipCard,
 }: GameScreenProps) {
   return (
     <div className="relative flex min-h-dvh flex-col bg-linear-to-b from-amber-100 via-orange-50 to-amber-200">
@@ -57,7 +61,12 @@ export function GameScreen({
         <p className="mb-2 text-sm font-medium text-amber-800/70">
           Mazo {DECK_LABELS[deck]}
         </p>
-        <CardViewer deck={deck} cardNumber={currentCard} />
+        <CardViewer
+          deck={deck}
+          cardNumber={currentCard}
+          onSkip={onSkipCard}
+          skipEnabled={canSkipCard}
+        />
 
         <div className="mt-6 text-center">
           {isFinished ? (

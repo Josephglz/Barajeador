@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DeckType } from '../types'
 import { DEFAULT_INTERVAL } from '../types'
-import { getCardSoundPath, playSound } from '../utils/audio'
+import {
+  getCardSoundPath,
+  getSharedAudio,
+  playSound,
+  playSoundFromGesture,
+  resetAudioUnlock,
+  stopSound,
+  unlockAudio,
+} from '../utils/audio'
 import { createShuffledDeck, drawCard } from '../utils/deck'
 
 export function useGame() {
@@ -15,9 +23,9 @@ export function useGame() {
   const [showHistoryModal, setShowHistoryModal] = useState(false)
   const [isFinished, setIsFinished] = useState(false)
 
-  const audioRef = useRef<HTMLAudioElement | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const sessionStartedRef = useRef(false)
+  const isPlayingRef = useRef(false)
   const intervalSecondsRef = useRef(intervalSeconds)
   const prevIntervalRef = useRef(intervalSeconds)
   const remainingDeckRef = useRef<number[]>([])
@@ -26,6 +34,10 @@ export function useGame() {
     intervalSecondsRef.current = intervalSeconds
   }, [intervalSeconds])
 
+  useEffect(() => {
+    isPlayingRef.current = isPlaying
+  }, [isPlaying])
+
   const clearTimer = useCallback(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current)
@@ -33,42 +45,45 @@ export function useGame() {
     }
   }, [])
 
-  const stopAudio = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause()
-      audioRef.current = null
-    }
+  const playCardSound = useCallback((cardNumber: number) => {
+    playSoundFromGesture(getCardSoundPath(cardNumber))
   }, [])
-
-  const playCardSound = useCallback(
-    (cardNumber: number) => {
-      stopAudio()
-      audioRef.current = playSound(getCardSoundPath(cardNumber))
-    },
-    [stopAudio],
-  )
 
   const setDeck = useCallback((deck: number[]) => {
     remainingDeckRef.current = deck
     setRemainingDeck(deck)
   }, [])
 
-  const drawNextCard = useCallback(() => {
-    const { card, remaining } = drawCard(remainingDeckRef.current)
-    remainingDeckRef.current = remaining
-    setRemainingDeck(remaining)
+  const drawNextCard = useCallback(
+    (fromGesture = false) => {
+      const { card, remaining } = drawCard(remainingDeckRef.current)
+      remainingDeckRef.current = remaining
+      setRemainingDeck(remaining)
 
-    if (card === null) {
-      clearTimer()
-      setIsPlaying(false)
-      setIsFinished(true)
-      return
-    }
+      if (card === null) {
+        clearTimer()
+        setIsPlaying(false)
+        setIsFinished(true)
+        return
+      }
 
-    setCurrentCard(card)
-    setDrawnCards((drawn) => [card, ...drawn])
-    playCardSound(card)
-  }, [clearTimer, playCardSound])
+      setCurrentCard(card)
+      setDrawnCards((drawn) => [card, ...drawn])
+
+      if (fromGesture) {
+        playSoundFromGesture(getCardSoundPath(card))
+      } else {
+        void playSound(getCardSoundPath(card))
+      }
+    },
+    [clearTimer],
+  )
+
+  const restartTimerIfPlaying = useCallback(() => {
+    if (!isPlayingRef.current) return
+    clearTimer()
+    intervalRef.current = setInterval(drawNextCard, intervalSecondsRef.current * 1000)
+  }, [clearTimer, drawNextCard])
 
   const startTimer = useCallback(() => {
     clearTimer()
@@ -77,7 +92,9 @@ export function useGame() {
 
   const resetSession = useCallback(() => {
     clearTimer()
-    stopAudio()
+    stopSound()
+    resetAudioUnlock()
+    getSharedAudio().onended = null
     sessionStartedRef.current = false
     const deck = createShuffledDeck()
     setDeck(deck)
@@ -85,7 +102,7 @@ export function useGame() {
     setCurrentCard(null)
     setIsPlaying(false)
     setIsFinished(false)
-  }, [clearTimer, stopAudio, setDeck])
+  }, [clearTimer, setDeck])
 
   const selectDeck = useCallback(
     (deck: DeckType) => {
@@ -99,7 +116,14 @@ export function useGame() {
     resetSession()
   }, [resetSession])
 
-  const togglePlay = useCallback(() => {
+  const skipToNextCard = useCallback(() => {
+    if (isFinished || !sessionStartedRef.current) return
+
+    drawNextCard(true)
+    restartTimerIfPlaying()
+  }, [isFinished, drawNextCard, restartTimerIfPlaying])
+
+  const togglePlay = useCallback(async () => {
     if (isFinished) return
 
     if (isPlaying) {
@@ -108,21 +132,23 @@ export function useGame() {
       return
     }
 
+    await unlockAudio()
     setIsPlaying(true)
 
     if (!sessionStartedRef.current) {
       sessionStartedRef.current = true
-      stopAudio()
-      const intro = playSound('/intro.mp3')
-      audioRef.current = intro
-      intro.onended = () => {
-        drawNextCard()
+      stopSound()
+      const audio = getSharedAudio()
+      audio.onended = () => {
+        audio.onended = null
+        drawNextCard(false)
         startTimer()
       }
+      playSoundFromGesture('/intro.mp3')
     } else {
       startTimer()
     }
-  }, [isFinished, isPlaying, clearTimer, stopAudio, drawNextCard, startTimer])
+  }, [isFinished, isPlaying, clearTimer, drawNextCard, startTimer])
 
   useEffect(() => {
     if (prevIntervalRef.current === intervalSeconds) return
@@ -135,9 +161,10 @@ export function useGame() {
   useEffect(() => {
     return () => {
       clearTimer()
-      stopAudio()
+      stopSound()
+      getSharedAudio().onended = null
     }
-  }, [clearTimer, stopAudio])
+  }, [clearTimer])
 
   return {
     selectedDeck,
@@ -152,6 +179,7 @@ export function useGame() {
     selectDeck,
     shuffleDeck,
     togglePlay,
+    skipToNextCard,
     setIntervalSeconds,
     setShowTimeModal,
     setShowHistoryModal,
